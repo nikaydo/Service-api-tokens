@@ -17,7 +17,7 @@ var db database.UserDB
 func TestMain(m *testing.M) {
 	env := config.Env{
 		EnvMap: map[string]string{
-			"POSTGRESS_URL": "postgres://postgres:postgres@localhost:15432/testdb?sslmode=disable",
+			"POSTGRESS_URL": "postgres://appuser:password@localhost:15432/auth?sslmode=disable",
 		},
 	}
 
