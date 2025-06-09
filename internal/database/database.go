@@ -71,6 +71,15 @@ func (u *UserDB) GetTokens(id int) (models.Tokens, error) {
 	return g, nil
 }
 
+func (u *UserDB) Verify(token string) (string, error) {
+	var result string
+	err := u.UserBD.QueryRowContext(context.Background(), `SELECT token FROM apitokens WHERE token = $1`, token).Scan(&result)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
 func (u *UserDB) DelToken(token string) error {
 	_, err := u.UserBD.ExecContext(context.Background(), `
 		DELETE FROM apitokens WHERE token = $1;`, token)

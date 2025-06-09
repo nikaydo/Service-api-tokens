@@ -14,29 +14,37 @@ type ApiTokenService struct {
 	Db database.UserDB
 }
 
-func (as *ApiTokenService) ApiTokenCreate(ctx context.Context, req *apiTokens.ApiTokenCreateRequest) (*apiTokens.ApiTokenCreateResponse, error) {
+func (as *ApiTokenService) Create(ctx context.Context, req *apiTokens.CreateRequest) (*apiTokens.CreateResponse, error) {
 	token, err := t.GenerateTokenValue()
-	fmt.Println(token, err)
 	if err != nil {
-		return &apiTokens.ApiTokenCreateResponse{}, err
+		return &apiTokens.CreateResponse{}, err
 	}
 	if err := as.Db.AddToken(int(req.Id), token); err != nil {
-		return &apiTokens.ApiTokenCreateResponse{}, err
+		return &apiTokens.CreateResponse{}, err
 	}
-	return &apiTokens.ApiTokenCreateResponse{Token: token}, nil
+	return &apiTokens.CreateResponse{Token: token}, nil
 }
 
-func (as *ApiTokenService) ApiTokenDelete(ctx context.Context, req *apiTokens.ApiTokenDeleteRequest) (*apiTokens.ApiTokenDeleteResponse, error) {
+func (as *ApiTokenService) Delete(ctx context.Context, req *apiTokens.DeleteRequest) (*apiTokens.DeleteResponse, error) {
 	if err := as.Db.DelToken(req.Token); err != nil {
-		return &apiTokens.ApiTokenDeleteResponse{Result: false}, err
+		return &apiTokens.DeleteResponse{Result: false}, err
 	}
-	return &apiTokens.ApiTokenDeleteResponse{Result: true}, nil
+	return &apiTokens.DeleteResponse{Result: true}, nil
 }
 
-func (as *ApiTokenService) ApiTokenGet(ctx context.Context, req *apiTokens.ApiTokenGetRequest) (*apiTokens.ApiTokenGetResponse, error) {
+func (as *ApiTokenService) Get(ctx context.Context, req *apiTokens.GetRequest) (*apiTokens.GetResponse, error) {
 	tokens, err := as.Db.GetTokens(int(req.Id))
 	if err != nil {
-		return &apiTokens.ApiTokenGetResponse{}, err
+		return &apiTokens.GetResponse{}, err
 	}
-	return &apiTokens.ApiTokenGetResponse{Tokens: &apiTokens.Tokens{Token: tokens.Token}}, nil
+	return &apiTokens.GetResponse{Tokens: &apiTokens.Tokens{Tokens: tokens.Token}}, nil
+}
+
+func (as *ApiTokenService) Verify(ctx context.Context, req *apiTokens.VerifyRequest) (*apiTokens.VerifyResponse, error) {
+	result, err := as.Db.Verify(req.Token)
+	if err != nil {
+		return &apiTokens.VerifyResponse{}, err
+	}
+	fmt.Println(result)
+	return &apiTokens.VerifyResponse{Result: true}, nil
 }
