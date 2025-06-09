@@ -11,4 +11,8 @@ tasks:
     cmds:  
       - docker compose up -d
       - go test -v ./...
+<<<<<<< HEAD
       - docker compose down
+=======
+      - docker compose down 
+>>>>>>> fc164dbc9b62fbeacc9f5d76e05866c50b52b5d7

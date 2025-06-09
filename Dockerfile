@@ -19,4 +19,3 @@ COPY .env ./
 
 EXPOSE 50051
 CMD ["./service"]
-
