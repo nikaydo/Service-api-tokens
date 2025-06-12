@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
-	github.com/nikaydo/grpc-contract v0.0.3
+	github.com/nikaydo/grpc-contract v0.0.4
 	github.com/stretchr/testify v1.8.1
 	google.golang.org/grpc v1.73.0
 )
