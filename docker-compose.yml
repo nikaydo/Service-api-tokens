@@ -1,11 +1,45 @@
-version: '3.1'
+# Локальный запуск сервиса и базы.
+#
+#   docker compose up --build
+#
+# Значения по умолчанию предназначены только для разработки.
 
 services:
-  postgres:
-    image: postgres:15
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: testdb
+      POSTGRES_USER: tokens
+      POSTGRES_PASSWORD: tokens
+      POSTGRES_DB: tokens
     ports:
-      - "15432:5432"
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tokens -d tokens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api-tokens-service:
+    build:
+      # Контракт подтягивается из прокси модулей по версии из go.mod,
+      # поэтому копировать его вручную не нужно.
+      context: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "50052:50052"
+    environment:
+      DATABASE_URL: postgres://tokens:tokens@db:5432/tokens?sslmode=disable
+      HOST: 0.0.0.0
+      PORT: 50052
+      MAX_TOKENS_PER_USER: "10"
+    env_file:
+      - path: .env
+        required: false
+
+volumes:
+  pgdata:
