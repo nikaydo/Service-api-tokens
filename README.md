@@ -26,15 +26,11 @@ slog · Docker · GitHub Actions
 git clone https://github.com/nikaydo/api-tokens-service.git
 cd api-tokens-service
 
-# 1. Контракт нужен как локальный модуль
-git clone --depth 1 https://github.com/nikaydo/grpc-contract.git ../grpc-contract
-go mod edit -replace github.com/nikaydo/grpc-contract=../grpc-contract
-
-# 2. Конфигурация
+# 1. Конфигурация
 cp .env.example .env
 # Заполнить DATABASE_URL
 
-# 3. Запуск
+# 2. Запуск
 docker compose up --build
 ```
 
