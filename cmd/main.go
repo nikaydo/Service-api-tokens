@@ -1,47 +1,112 @@
+// Command service — gRPC-сервис выпуска и проверки API-токенов.
 package main
 
 import (
-	"fmt"
-	"log"
-	"main/internal/config"
-	"main/internal/database"
-	au "main/internal/grpc"
+	"context"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	apiTokens "github.com/nikaydo/grpc-contract/gen/apiToken"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	grpcsrv "github.com/nikaydo/api-tokens-service/internal/grpc"
+
+	"github.com/nikaydo/api-tokens-service/internal/config"
+	"github.com/nikaydo/api-tokens-service/internal/database"
 )
 
 func main() {
-	env, err := config.ReadEnv()
-	if err != nil {
-		log.Fatal("Error loading .env file:", err)
+	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(log)
+
+	if err := run(log); err != nil {
+		log.Error("сервис завершился с ошибкой", "err", err)
+		os.Exit(1)
 	}
-	log.Println("Database succesful read")
-	db, err := database.DatabaseInit(env)
+}
+
+func run(log *slog.Logger) error {
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file:", err)
+		return err
 	}
-	log.Println("Database succesful connected")
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", env.EnvMap["HOST"], env.EnvMap["PORT"]))
+	log.Info("конфигурация загружена", "addr", cfg.Addr())
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	startupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	if err := database.RunMigrations(startupCtx, cfg.DatabaseURL, migrationsDir()); err != nil {
+		return err
+	}
+
+	store, err := database.New(startupCtx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return err
 	}
-	grpcServer := grpc.NewServer()
-	apiTokens.RegisterApiTokenServer(grpcServer, &au.ApiTokenService{Db: db})
-	log.Println("gRPC server started on ", fmt.Sprintf("%s:%s", env.EnvMap["HOST"], env.EnvMap["PORT"]))
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer store.Close()
+
+	lis, err := net.Listen("tcp", cfg.Addr())
+	if err != nil {
+		return err
+	}
+
+	server := grpc.NewServer(
+		grpc.MaxRecvMsgSize(cfg.MaxMessageBytes),
+		// Без интерцептора паника в обработчике обрушивает процесс:
+		// обработчики gRPC выполняются в горутинах сервера.
+		grpc.UnaryInterceptor(grpcsrv.LoggingInterceptor(log)),
+		grpc.ChainStreamInterceptor(grpcsrv.StreamLoggingInterceptor(log)),
+	)
+	apiTokens.RegisterApiTokenServer(server, grpcsrv.New(store, log, cfg.MaxTokensPerUser))
+	reflection.Register(server)
+
+	errCh := make(chan error, 1)
 	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+		log.Info("gRPC-сервер запущен", "addr", cfg.Addr())
+		if err := server.Serve(lis); err != nil {
+			errCh <- err
+			return
 		}
+		errCh <- nil
 	}()
-	<-quit
-	log.Println("Shutting down server...")
-	grpcServer.GracefulStop()
-	log.Println("Server gracefully stopped")
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		log.Info("получен сигнал завершения")
+	}
+
+	// Контекст приложения к этому моменту отменён, поэтому таймаут задаётся
+	// отдельным.
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+	select {
+	case <-done:
+		log.Info("сервер остановлен")
+		return nil
+	case <-time.After(cfg.ShutdownTimeout):
+		server.Stop()
+		log.Warn("сервер остановлен принудительно")
+		return <-errCh
+	}
+}
+
+// migrationsDir возвращает путь к каталогу миграций.
+func migrationsDir() string {
+	if dir := os.Getenv("MIGRATIONS_DIR"); dir != "" {
+		return dir
+	}
+	return "db/migrations"
 }
